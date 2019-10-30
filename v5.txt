@@ -4,7 +4,6 @@ Created on Tue Oct 22 12:16:31 2019
 @author: L. van Waveren
 """
 
-
 import numpy as np
 #import datetime
 import cv2
