@@ -1,0 +1,346 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Oct 22 12:16:31 2019
+@author: L. van Waveren
+"""
+
+
+import numpy as np
+#import datetime
+import cv2
+from copy import deepcopy
+import glob
+import os
+from skimage.measure import compare_ssim
+
+p="fietsers/fietser"
+extend="*.png"
+ 	 
+paths = glob.glob(p+extend)
+#print(paths)
+for path in paths:
+    os.remove(path)
+
+s=31*0.3
+s0=8.1
+s1=11.4
+ # afstand van links naar rechts van fietspad in meters
+pixelWidth=1080 #gewenste breedte van de foto
+ratioImg=0.5625 #ratio hoogte en breedte image
+alpha=pixelWidth/s #van meter naar pixels
+bikeList=[] # wordt de lijst met alle fietsers
+snelheden=[] # lijst met snelheden
+fietsersgehad=0 #fietsers die al uit beeld zijn
+videoList=[]#alle afbeeldingen
+
+prototxt, model,confidence1="MobileNetSSD_deploy.prototxt.txt","MobileNetSSD_deploy.caffemodel",0.5
+
+# Load different classes of detectable things
+CLASSES = ["background", "aeroplane", "bicycle", "bird", "boat",
+	"bottle", "bus", "car", "cat", "chair", "cow", "diningtable",
+	"dog", "horse", "motorbike", "person", "pottedplant", "sheep",
+	"sofa", "train", "tvmonitor"]
+
+COLORS = np.random.uniform(0, 255, size=(len(CLASSES), 3))
+
+# load our serialized model from disk
+print("[INFO] loading model...")
+net = cv2.dnn.readNetFromCaffe(prototxt, model)
+
+fps1=5#vs.get(cv2.CAP_PROP_FPS) #frames per seconde van video
+
+#wordt gebruikt voor de rechthoek om fietsers te koppelen
+snelheidvooruit=50 #max snelheid vooruit km/h
+snelheidopzij= 30#max snelheid opzij km/h
+
+#hardste snelheid naar afstand in pixels
+afstandvooruitpixels=snelheidvooruit/3.6/fps1*alpha
+afstandopzijpixels=snelheidopzij/3.6/fps1*alpha 
+
+#rechthoek binnen video afbakkenen
+linksrechthoek=70/200*pixelWidth
+rechtsrechthoek=130/200*pixelWidth
+
+#neemt de mogelijkheid weg dat een fiets even niet herkent wordt maar wel aanwezig is.
+fietsbuffer=2
+amountFrame=0
+
+txtPath="snelheid_v_t.txt"
+
+txtP1 ="snelheden.txt"
+txt1 = open(txtP1, "w")
+txt1.close()
+
+fourcc = cv2.VideoWriter_fourcc(*'XVID')
+out = cv2.VideoWriter("test6.mp4",fourcc,fps1,(pixelWidth,int(pixelWidth*ratioImg)))
+
+#%% leest de foto uit 
+def get_frames():
+#    url = 'http://131.180.232.64:8080/video'
+    url = 'http://192.168.1.70:8080/video'
+    url = 'http://131.180.239.207:8080/video'
+
+    cap = cv2.VideoCapture(url)
+    ret, frame = cap.read()        
+
+    return frame
+        
+#%% Mean Squared Error
+def mse(i,j,bikeList,videoList,bestMSE,vgem):
+    midXOld,midYOld=int(bikeList[i][-1][0]),int(bikeList[i][-1][1])
+    midXNew,midYNew=int(bikeList[j][-1][0]),int(bikeList[j][-1][1])
+    groteMSE=int(10/200*pixelWidth)
+#    print(midXOld,midYOld,midXNew,midYNew,groteMSE)
+    imageA=videoList[amountFrame-1][midYNew-groteMSE:midYNew+groteMSE, midXNew-groteMSE:midXNew+groteMSE]
+    imageB=videoList[bikeList[i][-1][2]-1][midYOld-groteMSE:midYOld+groteMSE, midXOld-groteMSE:midXOld+groteMSE]
+    cv2.imshow("A",imageA)
+    cv2.imshow("B",imageB)
+    
+    # NOTE: the two images must have the same dimension
+#    breedte=min(len(imageA[0]),len(imageB[0]))
+#    hoogte=min(len(imageA),len(imageB))
+#    imageA=imageA[0:hoogte,0:breedte]
+#    imageB=imageB[0:hoogte,0:breedte]
+    # convert the images to grayscale
+    grayA = cv2.cvtColor(imageA, cv2.COLOR_BGR2GRAY)
+    grayB = cv2.cvtColor(imageB, cv2.COLOR_BGR2GRAY)
+
+    # compute the Structural Similarity Index (SSIM) between the two
+    # images, ensuring that the difference image is returned
+    (score, diff) = compare_ssim(grayA, grayB, full=True)
+#    print("SSIM: "+str(score))
+	# the 'Mean Squared Error' between the two images is the
+	# sum of the squared difference between the two images;
+	
+    err = np.sum((imageA.astype("float") - imageB.astype("float")) ** 2)
+    err /= float(imageA.shape[0] * imageA.shape[1])
+    if err<bestMSE[1]:
+        vgem=((vgem*(bikeList[i][-1][2]-bikeList[i][0][2]))+(bikeList[j][0][0]-bikeList[i][-1][0]))/(amountFrame-bikeList[i][0][2])
+        bestMSE=[i,err,vgem]
+#        print("err",err,bestMSE)
+	# return the MSE, the lower the error, the more "similar"
+	# the two images are
+#    print("err",err,bestMSE)
+#    print("")
+    return bestMSE,score
+#%%
+def herken(bikeList,amountFrame,frame):
+    # loop over the detections
+    amountBikeFrame=0
+    for i in np.arange(0, detections.shape[2]):
+        
+		# extract the confidence (i.e., probability) associated with
+		# the prediction
+        confidence = detections[0, 0, i, 2]
+
+		# filter out weak detections by ensuring the `confidence` is
+		# greater than the minimum confidence
+        if confidence > confidence1:
+			# extract the index of the class label from the
+			# `detections`, then compute the (x, y)-coordinates of
+			# the bounding box for the object
+            idx = int(detections[0, 0, i, 1])
+            box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
+            (startX, startY, endX, endY) = box.astype("int")
+			# draw the prediction on the frame
+            label = "{}: {:.2f}%".format(CLASSES[idx],
+				confidence * 100)
+            
+            #berekent midden van de fietser
+            middenX,middenY=((endX+startX)/2),((endY+startY)/2)
+            
+
+            #herkenning binnen een bepaalde rechthoek, zorgt er voor dat de fiets volledig in beeld is
+            if middenX>(linksrechthoek) and middenX<(rechtsrechthoek):
+                if (CLASSES[idx])=="bicycle" or (CLASSES[idx])=="motorbike":
+                    #tekent een rechthoek om de fietser
+                    cv2.rectangle(frame, (startX, startY), (endX, endY),
+                				COLORS[idx], 2)
+                    #tekent een cirkel in het midden van de fietser
+                    cv2.circle(frame, (int(middenX), int(middenY)),
+                               3, (0, 255, 0), thickness=2, lineType=8, shift=0)
+                    y = startY - 15 if startY - 15 > 15 else startY + 15
+                    cv2.putText(frame, label, (startX, y),
+        				cv2.FONT_HERSHEY_SIMPLEX, 0.5, COLORS[idx], 2)
+                    
+                    
+                    #telt aantal fietsen per frame
+                    amountBikeFrame=amountBikeFrame+1
+                    #geeft de fietser een verwachte snelheid
+#                    s=(s1-s0)*(1-(endY/(pixelWidth*ratioImg)))+s0
+#                    alpha=pixelWidth/s
+                    vgem=0
+                    #vgem=15/3.6/fps1*alpha#pixels/frame
+                    #slaat de lokatie van de elke fietser met frame nummer
+                    bikeList.append([[middenX,middenY,amountFrame,endY,vgem]])
+    return bikeList,amountBikeFrame,frame
+
+#%% Calculate speed
+def printSnelheid(snelheden,fietsersgehad,fietsbuffer):
+#    print("fietsergehad",fietsersgehad,len(bikeList)-amountBikeFrame-fietsbuffer,len(bikeList))
+    txt=open(txtPath,"a")
+    txt1=open(txtP1, "a")
+    for i in range(fietsersgehad,len(bikeList)-amountBikeFrame-fietsbuffer):
+        #neemt begin en eind punt, tijd
+        middenX1, middenY1,amountFrame1,endY1,vgem1=bikeList[i][0]
+        middenX2, middenY2,amountFrame2,endY2,vgem2=bikeList[i][-1]
+        gemEndY=0
+        for iy in range(len(bikeList[i])):
+            gemEndY+=bikeList[i][iy][3]/len(bikeList[i])
+            
+
+#        print(middenX2, middenY2,amountFrame2)
+        #berekening van snelheid
+        t1=amountFrame1/fps1
+        t2=(amountFrame2)/fps1
+        t=(t1+t2)/2
+        s=(s1-s0)*(1-(gemEndY/(pixelWidth*ratioImg)))+s0
+        alpha=pixelWidth/s
+        v=vgem2*fps1/alpha
+        #zorgt ervoor dat de fietser niet meer mee wordt genomen in de while loop
+        fietsersgehad+=1
+        
+#        print(bikeList)
+        print("fietser",fietsersgehad,": v =",np.round(v,decimals=2),"m/s = ",np.round(v*3.6,decimals=2),"km/h")
+        snelheden.append(v)
+        txt.write(str(v)+","+str(t)+","+str(v*3.6)+"\n")
+        txt1.write("fietser %s : v= " % fietsersgehad)
+        txt1.write("%s m/s =" % np.round(v,decimals=1))
+        txt1.write("%s km/h \n" % np.round(v*3.6,decimals =1))
+
+    txt.close()
+    txt1.close()
+    return snelheden,fietsersgehad
+    #slaat de snelheid op
+
+#%%
+def fietskoppelen(bikeList):
+    j=len(bikeList)-amountBikeFrame
+    #is de loop voor de nieuwe fietsers
+#    print("frames",amountFrame)
+#    print(bikeList)
+    while j<len(bikeList):            
+        
+        i=fietsersgehad
+        #is de loop van de oude fietsers 
+        #i<j zorgt ervoor dat er geen overlap is
+#        dichtstebij=[-1,pixelWidth,0]
+        bestMSE=[-1,np.inf,0]
+        while i<j:
+#            print("i,j",i,j)
+            #neemt het verschil in frames van de bekende fietsers en de mogelijke fietser
+            dframe=amountFrame-bikeList[i][-1][2]
+            if dframe >0:
+                #kijken of op basis van snelheid de fietser aan de fietser van het vorge frame kan worden gekoppelt
+                if len(bikeList[i])>=2:
+                    vgem=bikeList[i][-1][4]
+                    #berekent mogelijk positie van de al bekende fiets
+                    mogelijkpos=bikeList[i][-1][0]+(vgem)*(dframe)
+                    #kijkt of de mogelijke positie binnen de rechthoek valt
+                    if mogelijkpos>0 and mogelijkpos<pixelWidth:
+                        #berekent het verschil in afstand tussen de mogelijke positie en de fiets in dit frame
+                        dSFrames=abs(mogelijkpos-bikeList[j][0][0])   
+#                        print("mogelijkpos",mogelijkpos,"PosBikeNU", bikeList[j][-1][0],"Ds",dSFrames,"Uvoor",afstandvooruitpixels+(2*200/pixelWidth*dframe))
+                        #kijkt of het mogelijke verschil bij de fietser past + een onzekerheid in het verschil in frames
+                        # zo ja wordt er gekeken bij welke fiets de afstand het kleinst is
+                        if dSFrames< afstandvooruitpixels+(2*200/pixelWidth*dframe) and  abs(bikeList[i][-1][1]-bikeList[j][0][1])<afstandopzijpixels+dframe*200/pixelWidth:
+                            bestMSE,score=mse(i,j,bikeList,videoList,bestMSE,vgem)
+#                            if dichtstebij[1]>dSFrames:
+#                                vgem=((vgem*(bikeList[i][-1][2]-bikeList[i][0][2]))+(bikeList[j][0][0]-bikeList[i][-1][0]))/(amountFrame-bikeList[i][0][2])
+#                                dichtstebij=[i,dSFrames,vgem]
+#                                print("i,j,dSFrames>2",i,j,dSFrames)
+       
+                if len(bikeList[i])<2:
+                    #tekent een rechthoek om het middelpunt van een fietser van het vorige frame en 
+                    #kijkt welke fietsers hier binnen vallen
+                    #De fietsers met het kleinste verschil in middelpunt binnen de rechthoek wordt gezien als dezelfde fietser
+                    dSFrames=abs(bikeList[i][-1][0]-bikeList[j][0][0])
+#                    if dSFrames< afstandvooruitpixels+dframe*(10/200*pixelWidth) and  abs(bikeList[i][-1][1]-bikeList[j][0][1])<afstandopzijpixels+dframe*(1/200*pixelWidth):
+                    bestMSE,score=mse(i,j,bikeList,videoList,bestMSE,vgem=0)
+                    if score<0.3 and bestMSE[1]>10000:
+                        bestMSE=[-1,np.inf,0]
+                    
+            #aan het einde van de while loop wordt van de fietsers gekeken of de fietser dezelfde fiesters is
+            #zo ja dan worden de fietser gekoppelt en op de andere plek verwijderd
+            #zo nee dan staat de fietser apart in de bikeList
+            if bestMSE[1]!=np.inf and i==j-1:
+                pos=bestMSE[0]
+                vgem=bestMSE[2]
+                bikeList[pos].append([bikeList[j][0][0],bikeList[j][0][1],bikeList[j][0][2],bikeList[j][0][3],vgem])
+#                    print(bikeList)
+#                    print(j)
+                midXNew,midYNew=int(bikeList[j][-1][0]),int(bikeList[j][-1][1])
+                groteMSE=int(10/200*pixelWidth)
+                imageA=videoList[amountFrame-1][midYNew-groteMSE:midYNew+groteMSE, midXNew-groteMSE:midXNew+groteMSE]
+                cv2.imwrite("fietsers/fietser_"+str(pos-1)+"_"+str(len(bikeList[pos]))+".png",imageA)
+                bikeList.pop(j)
+                j=j-1
+#                print(bikeList)
+#                print("")
+#                    print(len(bikeList))
+            i=i+1
+        j=j+1
+#        print("fietsersgehad,len(bikeList)-fietsers",fietsersgehad,len(bikeList)-amountBikeFrame)
+    return bikeList,j
+
+#%%
+while True:
+
+	 #grab the frame from the threaded video stream
+    frame = get_frames()
+#    cv2.imshow('frame',frame)
+
+    #telt het aantal frames
+    amountFrame=amountFrame+1
+    #kijkt of er een foto is. Moet alleen worden gebruikt bij videos op het einde niet meer
+    if (type(frame) == type(None)):
+        break
+    
+    #resize afbeelding
+    frame = cv2.resize(frame, (pixelWidth,int(pixelWidth*ratioImg)))
+    videoList.append(deepcopy(frame))
+    out.write(frame)
+
+	# grab the frame dimensions and convert it to a blob
+    (h, w) = frame.shape[:2]
+    blob = cv2.dnn.blobFromImage(cv2.resize(frame, (300, 300)),
+		0.007843, (300, 300), 127.5)
+
+	# pass the blob through the network and obtain the detections and
+	# predictions
+    net.setInput(blob)
+    detections = net.forward()
+    
+    # functie herkent fietsers binnen een bepaalde rechthoek en geeft de middelpunten van alle fietsers terug met het frame nummer
+    bikeList,amountBikeFrame,frame=herken(bikeList,amountFrame,frame)
+         
+    #kijkt of er een fiets in beeld is na de herkenning
+    if amountBikeFrame>=1:
+        bikeList,j=fietskoppelen(bikeList)
+        #slaat de snelheid op als de fietser uit beeld is
+        # de buffer zorgtervoor dat de fietser tijdelijk uit beeld kan zijn
+        if len(bikeList)-amountBikeFrame-fietsbuffer>0:
+            snelheden,fietsersgehad=printSnelheid(snelheden,fietsersgehad,fietsbuffer)
+        cv2.imwrite("fietser-" + str(j) +".png", frame)
+
+        #        out.write(frame)
+     # show the output frame      
+    cv2.imshow("Server", frame)
+    key = cv2.waitKey(1) & 0xFF
+
+	# if the `q` key was pressed, break from the loop
+    if key == ord("q"):
+        break 
+
+
+    #schrijft frames weg
+#    cv2.imwrite("/frames/"+str(amountFrame)+"Frame.jpg", frame)
+#%%
+out.release()
+#print, slaat op snelheid en zet video weg als de fietser uit beeld is 
+snelheden,fietsersgehad=printSnelheid(snelheden,fietsersgehad,fietsbuffer=0)
+#out.release()
+cv2.destroyAllWindows()
+#vs.stop()
+print(snelheden)
+#print("tijd: ",datetime.datetime.now()-tstart," s")
