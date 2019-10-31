@@ -1,5 +1,4 @@
-# DEF2
-Bike Speedcam
+# DEF2 - Bike Speedcam
 
 # Goal
 This project is the result of the subject DEF 2 as part of the bachelor Applied Physics at the Delft University of Technology. For this course we had to design a speed measuring device to measure the speed of passing bicycles. To do so we decided to make use of a camera as it is a non intrusive way to measure speed, in comparison to for example pressure plates. 
