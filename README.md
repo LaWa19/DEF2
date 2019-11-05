@@ -7,11 +7,11 @@ This project is the result of the course DEF 2 as part of the bachelor Applied P
 AI is being used to detect a bike. By following the middle point of those bikes the speed can be determined over a certain distance. The measurement setup consists of a Raspberry Pi Zero with a camera, which uploads 20 second video's over wifi to a server. Using a python script on an off-site computer those videos are analized one by one to compute the speed of each cyclist.
 
 # Acknowledgements
-Herken model van fiets
+Model to recognise bikes
 https://www.pyimagesearch.com/2017/09/18/real-time-object-detection-with-deep-learning-and-opencv/
 
-ssim waarde
+SSIM value calculation
 https://www.pyimagesearch.com/2017/06/19/image-difference-with-opencv-and-python/
 
-MSE Waarde
+MSE value
 https://gist.github.com/gonzalo123/df3e43477f8627ecd1494d138eae03ae
