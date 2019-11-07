@@ -6,7 +6,7 @@ This project is the result of the course DEF 2 as part of the bachelor Applied P
 # Method
 Deep learning is being used to detect a bike. By following the middle point of those bikes the speed can be determined over a certain distance. The measurement setup consists of a Raspberry Pi Zero with a camera, which uploads 20 second video's over WIFI to a server. Using a python script on an off-site computer those videos are analysed one by one to compute the speed of each cyclist.
 
-# readme
+# Readme
 saveVideo.py & copyVideo.py are simultaneously run on the Pi Zero.
 The saveVideo.py records 20 second videos which the copyVideo.py uploads the videos to a server.
 
