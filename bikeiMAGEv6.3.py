@@ -314,7 +314,7 @@ def herken(bikeList,videoFrame,frame,tvideo,snelheden,fietsersgehad,fietsermetv0
                     bikeList=fietskoppelen(bikeList)
         
                     #slaat de snelheid op als de fietser uit beeld is
-                    # de buffer zorgtervoor dat de fietser tijdelijk uit beeld kan zijn
+                    # de buffer zorgtervoor dat het ook werkt als de fietser tijdelijk niet herkend wordt
                     if len(bikeList)-amountBikeFrame-fietsbuffer>0:
                         snelheden,fietsersgehad,fietsermetv0=printSnelheid(snelheden,fietsersgehad,fietsbuffer,fietsermetv0)
     return bikeList,amountBikeFrame,frame,snelheden,fietsersgehad,fietsermetv0
