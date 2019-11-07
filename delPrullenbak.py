@@ -61,9 +61,7 @@ class LaPrul():
         password=input("geef password van netwerkschijf")
         #inloggen
         ui.WebDriverWait(self.driver,15).until(EC.presence_of_element_located((By.XPATH, "/html/body/div/div/div/form/div[1]/input[1]"))).send_keys(username)
-#        self.typen("def")
         ui.WebDriverWait(self.driver,15).until(EC.presence_of_element_located((By.XPATH, "/html/body/div/div/div/form/div[1]/input[2]"))).send_keys(password)
-#        self.typen("speedcam")
         ui.WebDriverWait(self.driver,15).until(EC.presence_of_element_located((By.XPATH, "/html/body/div/div/div/form/div[1]/button"))).click()
 #        expediaUnitTest.pressenter(self)
         ui.WebDriverWait(self.driver,15).until(EC.presence_of_element_located((By.XPATH, "/html/body/div[1]/div[1]/nav[1]/div/ul/li[5]/a"))).click()
