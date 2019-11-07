@@ -2,7 +2,7 @@
 """
 Created on Tue Oct 22 18:23:23 2019
 
-@author: Roeland
+@author: Groep 5A
 """
 
 #   let op regel 496=schijf,  staat uit 
